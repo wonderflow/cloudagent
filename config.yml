@@ -1,0 +1,13 @@
+---
+base_dir: /Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test
+logfile: /var/vcap/sys/log/cloud_agent/cloud_agent.log
+loglevel: DEBUG
+mbus: nats://nats:c1oudc0w@10.10.101.165:4222/
+heartbeat_interval: 30
+monit_files: /Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test/monit/monit.user
+monit_url: 10.10.101.152:2822
+etcd_url: 10.10.101.152:4001
+etcd_dir: /cloud_agent
+job: esbgateway
+job_index: 0
+agent_id: 34f7d278-f67a-4e7c-83bd-a90d46b1af5c

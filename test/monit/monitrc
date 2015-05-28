@@ -1,0 +1,1 @@
+check process test with pidfile /Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test/monit/test.pid start program "/Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test/monit/test_ctl start" with timeout 60 seconds stop program "/Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test/monit/test_ctl stop" group wonderflow mode manual

@@ -1,0 +1,43 @@
+#!/bin/bash
+
+RUN_DIR=/Users/wonderflow/golang/src/github.com/wonderflow/cloudagent/test/monit
+PIDFILE=$RUN_DIR/test.pid
+
+kill_and_wait() {
+  pidfile=$1
+  # Monit default timeout for start/stop is 30s
+  # Append 'with timeout {n} seconds' to monit start/stop program configs
+  timeout=${2:-25}
+  force=${3:-1}
+
+  wait_pidfile $pidfile 1 $timeout $force
+}
+
+case $1 in
+
+  start)
+    pid_guard $PIDFILE "test"
+
+    mkdir -p $WORK_DIR
+
+    chown -R wonderflow:wonderflow $RUN_DIR
+   
+    echo $$ > $PIDFILE
+
+
+
+    exec chpst -u wonderflow:wonderflow while (( 1 < 2 )) ; do ;  echo 1 ; sleep 1 ; done
+	
+    ;;
+
+  stop)
+    kill_and_wait $PIDFILE
+
+    ;;
+
+  *)
+    echo "Usage: test_ctl {start|stop}"
+
+    ;;
+
+esac
