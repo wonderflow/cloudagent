@@ -5,10 +5,14 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/wonderflow/cloudagent/config"
 	"log"
+	"strings"
 	"time"
 )
 
 func Connect(conf *config.Config, ip string) {
+	if strings.Contains(conf.Etcd_url, "http://") != true {
+		conf.Etcd_url = "http://" + conf.Etcd_url
+	}
 	machines := []string{conf.Etcd_url}
 	client := etcd.NewClient(machines)
 

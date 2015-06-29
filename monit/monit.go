@@ -111,6 +111,10 @@ func GetMonitStatusXML(conf *config.Config) io.Reader {
 		return nil
 	}
 	userinfo := strings.Split(string(buf), ":")
+	for i, s := range userinfo {
+		userinfo[i] = strings.Trim(s, " ")
+		userinfo[i] = strings.Trim(s, "\n")
+	}
 	url := conf.Monit_url
 
 	client := &http.Client{}
@@ -122,16 +126,22 @@ func GetMonitStatusXML(conf *config.Config) io.Reader {
 		fmt.Printf("Request monit status error %s %v\n", url, err)
 		return nil
 	}
+	if resp.StatusCode != 200 {
+		fmt.Printf("Request Monit error: %v\n", resp.StatusCode)
+		return nil
+	}
 	return resp.Body
 }
 
 func ParseXML(raw io.Reader) (MonitStatus, error) {
 	v := MonitStatus{}
+
 	decoder := xml.NewDecoder(raw)
 	decoder.CharsetReader = charset.NewReader
 	err := decoder.Decode(&v)
 	if err != nil {
-		fmt.Printf("error: %v", err)
+		fmt.Printf("Parse monit XML error: %v\n", err)
+
 		return v, err
 	}
 	return v, nil

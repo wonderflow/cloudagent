@@ -1,4 +1,4 @@
 #!/bin/bash
 
-docker build -t test .
-docker run -it test
+docker build --rm -t test .
+docker run -it --rm test
