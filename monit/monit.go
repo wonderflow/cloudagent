@@ -13,44 +13,46 @@ import (
 )
 
 type Service struct {
-	ServiceName    string  `xml:"name,attr"`
-	Type           int     `xml:"type"`
-	Collected_sec  int64   `xml:"collected_sec"`
-	Collected_usec int64   `xml:"collected_usec"`
-	Status         int     `xml:"status"`
-	Status_hint    int     `xml:"status_hint"`
-	Monitor        int     `xml:"monitor"`
-	Monitormode    int     `xml:"monitormode"`
-	pendingaction  int     `xml:"pendingaction"`
-	Pid            int     `xml:"pid"`
-	Ppid           int     `xml:"ppid"`
-	Uptime         int     `xml:"uptime"`
-	Children       int     `xml:"children"`
-	MemPercent     float64 `xml:"memory>percenttotal"`
-	CpuPercent     float64 `xml:"cpu>percenttotal"`
-	SysLoad        Load    `xml:"system>load"`
-	SysCpu         Cpu     `xml:"system>cpu"`
-	SysMemory      Memory  `xml:"system>memory"`
-	SysSwap        Swap    `xml:"system>swap"`
+	ServiceName string `xml:"name,attr"`
+	//file_system => 0,directory => 1,file => 2,process => 3,remote_host => 4,system => 5,fifo => 6
+	Type           int   `xml:"type"`
+	Collected_sec  int64 `xml:"collected_sec"`
+	Collected_usec int64 `xml:"collected_usec"`
+	Status         int   `xml:"status"`
+	Status_hint    int   `xml:"status_hint"`
+	//MONITOR： no => 0,yes => 1,init => 2
+	Monitor       int     `xml:"monitor"`
+	Monitormode   int     `xml:"monitormode"`
+	pendingaction int     `xml:"pendingaction"`
+	Pid           int     `xml:"pid"`
+	Ppid          int     `xml:"ppid"`
+	Uptime        int     `xml:"uptime"`
+	Children      int     `xml:"children"`
+	MemPercent    float64 `xml:"memory>percenttotal"`
+	CpuPercent    float64 `xml:"cpu>percenttotal"`
+	SysLoad       Load    `xml:"system>load"`
+	SysCpu        Cpu     `xml:"system>cpu"`
+	SysMemory     Memory  `xml:"system>memory"`
+	SysSwap       Swap    `xml:"system>swap"`
 }
 
 type Load struct {
-	Avg01 float64 `xml:"avg01"`
-	Avg05 float64 `xml:"avg05"`
-	Avg15 float64 `xml:"avg15"`
+	Avg01 float64 `json:"avg01" xml:"avg01"`
+	Avg05 float64 `json:"avg05" xml:"avg05"`
+	Avg15 float64 `json:"avg15" xml:"avg15"`
 }
 type Cpu struct {
-	User   float64 `xml:"user"`
-	System float64 `xml:"system"`
-	Wait   float64 `xml:"wait"`
+	User   float64 `json:"user" xml:"user"`
+	System float64 `json:"system" xml:"system"`
+	Wait   float64 `json:"wait" xml:"wait"`
 }
 type Memory struct {
-	Percent  float64 `xml:"percent"`
-	Kilobyte int64   `xml:"kilobyte"`
+	Percent float64 `json:"percent" xml:"percent"`
+	Kb      int64   `json:"kb" xml:"kilobyte"`
 }
 type Swap struct {
-	Percent  float64 `xmL:"percent"`
-	Kilobyte int64   `xml:"kilobyte"`
+	Percent float64 `json:"percent" xmL:"percent"`
+	Kb      int64   `json:"kb" xml:"kilobyte"`
 }
 
 /*

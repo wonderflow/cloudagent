@@ -16,8 +16,6 @@ type Config struct {
 	Monit_url          string
 	Etcd_url           string
 	Etcd_dir           string
-	Job_name           string
-	Job_index          int
 	Agent_id           string
 }
 
@@ -46,8 +44,6 @@ func GetTemplate() *Config {
 		Monit_url:          "10.10.101.152:2822",
 		Etcd_url:           "http://10.10.101.146:2379",
 		Etcd_dir:           "cloud_agent",
-		Job_name:           "test",
-		Job_index:          0,
 		Agent_id:           "testid",
 	}
 }

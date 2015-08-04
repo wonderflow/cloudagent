@@ -65,67 +65,104 @@ func GetCurrPath() string {
      }
 */
 
+type IntPercent struct {
+	Percent int16 `json:"percent"`
+}
+
 type DiskInfo struct {
-	System     float64
-	Ephemeral  float64
-	Persistent float64
+	System     IntPercent `json:"system"`
+	Ephemeral  IntPercent `json:"ephemeral"`
+	Persistent IntPercent `json:"persistent"`
 }
 
 type NetTraffic struct {
-	TxBytesPerSec      float64
-	RxBytesPerSec      float64
-	TxErrorBytesPerSec float64
-	RxErrorBytesPerSec float64
+	Out float64 `json:"out"`
+	In  float64 `json:"in"`
+	Sum float64 `josn:"sum"`
 }
 
 type NTP struct {
-	Offset    float64
-	TimeStamp time.Time
+	Offset    float64   `json:"offset"`
+	TimeStamp time.Time `json:"timestamp"`
 }
 
 type SystemLoad struct {
-	Load monit.Load
-	Cpu  monit.Cpu
-	Mem  monit.Memory
-	Swap monit.Swap
-	Disk DiskInfo
+	Load monit.Load   `json:"load"`
+	Cpu  monit.Cpu    `json:"cpu"`
+	Mem  monit.Memory `json:"mem"`
+	Swap monit.Swap   `json:"swap"`
+	Disk DiskInfo     `json:"disk"`
+}
+
+type JobInfo struct {
+	Name      string
+	Index     int
+	Job_state string
 }
 
 type AgentInfo struct {
-	AgentID     string
-	Job         string
-	Index       int
-	Job_state   string
-	System_load SystemLoad
-	Traffic     NetTraffic
-	Ntp         NTP
-	Ip          string
-	Eth0Stats   sysfs.InterfaceStats
-	Cnt         int
+	Job       []JobInfo
+	Vitals    SystemLoad
+	Traffic   NetTraffic
+	Ntp       NTP
+	Address   string
+	Cnt       int
+	Eth0Stats sysfs.InterfaceStats
+}
+
+type HeartBeat struct {
+	Job       string     `json:"job"`
+	Index     int        `json:"index"`
+	Job_state string     `json:"job_state"`
+	Vitals    SystemLoad `json:"vitals"`
+	Traffic   NetTraffic `json:"traffic"`
+	Ntp       NTP        `json:"ntp"`
+	Address   string     `json:"address"`
 }
 
 func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int) {
-	agentInfo.AgentID = conf.Agent_id
 	diskUsage := disk.GetDiskUsage(*conf)
-	agentInfo.System_load.Disk.System = diskUsage["system"]
-	agentInfo.System_load.Disk.Ephemeral = diskUsage["ephemeral"]
-	agentInfo.System_load.Disk.Persistent = diskUsage["persistent"]
+	agentInfo.Vitals.Disk.System.Percent = int16(diskUsage["system"])
+	agentInfo.Vitals.Disk.Ephemeral.Percent = int16(diskUsage["ephemeral"])
+	agentInfo.Vitals.Disk.Persistent.Percent = int16(diskUsage["persistent"])
 
 	monitStatus := monit.GetMonitStatus(conf)
-
+	//num := 0
 	for _, x := range monitStatus.Services {
 		if strings.Contains(x.ServiceName, "system") {
-			agentInfo.System_load.Cpu = x.SysCpu
-			agentInfo.System_load.Load = x.SysLoad
-			agentInfo.System_load.Mem = x.SysMemory
-			agentInfo.System_load.Swap = x.SysSwap
+			agentInfo.Vitals.Cpu = x.SysCpu
+			agentInfo.Vitals.Load = x.SysLoad
+			agentInfo.Vitals.Mem = x.SysMemory
+			agentInfo.Vitals.Swap = x.SysSwap
+			continue
 		}
+		tempJob := JobInfo{}
+		tempJob.Name = x.ServiceName
+		tempJob.Index = 1
+		//TODO: use etcd lock to get real index.
+
+		if x.Monitor == 0 {
+			tempJob.Job_state = "starting"
+		} else if x.Monitor == 1 {
+			tempJob.Job_state = "running"
+		} else {
+			tempJob.Job_state = "not monitored"
+		}
+		agentInfo.Job = append(agentInfo.Job, tempJob)
+
 	}
 	sysFs, err := sysfs.NewRealSysFs()
 	if err != nil {
 		fmt.Printf("New Real SysFs error : %v \n", err)
 	}
+
+	if conf.Agent_id == "" {
+		conf.Agent_id, err = sysFs.GetSystemUUID()
+	}
+	//	agentInfo.AgentID = conf.Agent_id
+
 	//netDevices, err = sysfs.GetNetworkInfo(sysFs)
+
 	var preStats sysfs.InterfaceStats
 	if agentInfo.Cnt != 0 {
 		var err error
@@ -139,32 +176,46 @@ func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int) {
 	}
 	newStats, err := sysfs.GetNetworkStats("eth0", sysFs)
 	agentInfo.Cnt++
-	agentInfo.Traffic.RxBytesPerSec = float64(newStats.RxBytes-preStats.RxBytes) / float64(interval)
-	agentInfo.Traffic.TxBytesPerSec = float64(newStats.TxBytes-preStats.TxBytes) / float64(interval)
-	agentInfo.Traffic.RxErrorBytesPerSec = float64(newStats.RxErrors-preStats.RxErrors) / float64(interval)
-	agentInfo.Traffic.TxErrorBytesPerSec = float64(newStats.TxErrors-preStats.TxErrors) / float64(interval)
+	agentInfo.Traffic.In = float64(newStats.RxBytes-preStats.RxBytes) / float64(interval)
+	agentInfo.Traffic.Out = float64(newStats.TxBytes-preStats.TxBytes) / float64(interval)
+	agentInfo.Traffic.Sum = agentInfo.Traffic.In + agentInfo.Traffic.Out
 	agentInfo.Eth0Stats = newStats
 
 	agentInfo.Ntp.TimeStamp = time.Now()
-	agentInfo.Ip = util.GetLocalIp()
+	agentInfo.Address = util.GetLocalIp()
 
 }
 
 func TransferMetrics(agentInfo *AgentInfo, conf *config.Config) {
+	etcd.Connect(conf, util.GetLocalIp())
 	nc, _ := nats.NatsConnect(conf.Mbus)
 	for {
 		GetMetrics(agentInfo, conf, 3)
-		data, err := json.Marshal(agentInfo)
-		if err != nil {
-			fmt.Printf("Json Marshal agentInfo error : %v\n", err)
+		pubmessage := fmt.Sprintf("hm.agent.heartbeat.%s", conf.Agent_id)
+		fmt.Println(pubmessage)
+		for i := 0; i < len(agentInfo.Job); i++ {
+			heartBeatInfo := HeartBeat{}
+			heartBeatInfo.Address = agentInfo.Address
+			heartBeatInfo.Index = agentInfo.Job[i].Index
+			heartBeatInfo.Job = agentInfo.Job[i].Name
+			heartBeatInfo.Job_state = agentInfo.Job[i].Job_state
+			heartBeatInfo.Ntp = agentInfo.Ntp
+			heartBeatInfo.Traffic = agentInfo.Traffic
+			heartBeatInfo.Vitals = agentInfo.Vitals
+			data, err := json.Marshal(heartBeatInfo)
+			if err != nil {
+				fmt.Printf("Json Marshal agentInfo error : %v\n", err)
+			}
+			nats.NatsPub(pubmessage, nc, data)
 		}
-		nats.NatsPub("cloudagent", nc, data)
+
 		time.Sleep(3 * time.Second)
 	}
 }
 
 func main() {
 	config_path := flag.String("c", "", "config file path")
+	daemon := flag.Bool("d", false, "run as cloud agent controller")
 	flag.Parse()
 	var (
 		config_file string
@@ -173,17 +224,20 @@ func main() {
 	)
 	if !IsFile(*config_path) {
 		conf = config.GetTemplate()
+		fmt.Printf("No config file find in path: %s . Using template config file.\n", *config_path)
 	} else {
 		config_file = *config_path
 		conf, err = config.GetConfig(config_file)
 		if err != nil {
-			fmt.Println("get config error")
+			fmt.Printf("get config error: %v\n", err)
 			return
 		}
 	}
-	agentInfo := &AgentInfo{}
-	etcd.Connect(conf, util.GetLocalIp())
+	if *daemon == false {
+		agentInfo := &AgentInfo{}
+		go TransferMetrics(agentInfo, conf)
+	} else {
 
-	go TransferMetrics(agentInfo, conf)
+	}
 	util.Trap(func() {})
 }

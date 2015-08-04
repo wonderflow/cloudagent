@@ -8,6 +8,4 @@ monit_files: /var/vcap/monit/monit.user
 monit_url: 10.10.101.152:2822
 etcd_url: 10.10.101.146:4001
 etcd_dir: /cloud_agent
-job: esbgateway
-job_index: 0
-agent_id: 34f7d278-f67a-4e7c-83bd-a90d46b1af5c
+agent_id: test

@@ -4,4 +4,4 @@ set -e
 set -x
 
 go build cloudagent.go
-./cloudagent -c ../config.yml
+./cloudagent -c /go/src/github.com/wonderflow/cloudagent/config.yml
