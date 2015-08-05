@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	rawetcd "github.com/coreos/go-etcd/etcd"
 	"github.com/wonderflow/cloudagent/config"
 	"github.com/wonderflow/cloudagent/disk"
 	"github.com/wonderflow/cloudagent/etcd"
@@ -37,9 +38,9 @@ func GetCurrPath() string {
 }
 
 /*
-  Heartbeat payload example:
+  Heartbeat system payload example:
    {
-     "job": "cloud_controller",
+     "job": "system",
      "index": 3,
        "job_state":"running",
       "vitals": {
@@ -65,14 +66,37 @@ func GetCurrPath() string {
      }
 */
 
-type IntPercent struct {
-	Percent int16 `json:"percent"`
+/*
+  Heartbeat process payload example:
+   {
+     "job": "cloud_controller",
+     "index": 3,
+     "job_state":"running",
+     "vitals": {
+       "cpu" :{"percenttotal" =>"0.4"},
+       "mem": { "percent" => "0.5", "kb" => "21212" },
+       "process": { "status" => "0", "monitor" => "1","uptime"=>"2579142","children"=>"0"}
+      },
+     "ntp": {
+           "offset": "-0.06423",
+           "timestamp": "14 Oct 11:13:19"
+       }
+     "address": "127.0.0.1"
+     }
+*/
+
+type FloatPercent struct {
+	Percent float64 `json:"percent"`
+}
+
+type PercentTotal struct {
+	Percent float64 `json:"percenttotal"`
 }
 
 type DiskInfo struct {
-	System     IntPercent `json:"system"`
-	Ephemeral  IntPercent `json:"ephemeral"`
-	Persistent IntPercent `json:"persistent"`
+	System     FloatPercent `json:"system"`
+	Ephemeral  FloatPercent `json:"ephemeral"`
+	Persistent FloatPercent `json:"persistent"`
 }
 
 type NetTraffic struct {
@@ -94,10 +118,25 @@ type SystemLoad struct {
 	Disk DiskInfo     `json:"disk"`
 }
 
+type ProcessInfo struct {
+	Status   int `json:"status"`
+	Monitor  int `json:"monitor"`
+	Uptime   int `json:"uptime"`
+	Children int `json:"children"`
+}
+
+type ProcessVital struct {
+	Cpu     PercentTotal `json:"cpu"`
+	Mem     monit.Memory `json:"mem"`
+	Process ProcessInfo  `json:"process"`
+}
+
 type JobInfo struct {
-	Name      string
-	Index     int
-	Job_state string
+	Name        string
+	Index       int
+	Job_state   string
+	ProcessData ProcessVital
+	Type        int
 }
 
 type AgentInfo struct {
@@ -110,7 +149,7 @@ type AgentInfo struct {
 	Eth0Stats sysfs.InterfaceStats
 }
 
-type HeartBeat struct {
+type SysHeartBeat struct {
 	Job       string     `json:"job"`
 	Index     int        `json:"index"`
 	Job_state string     `json:"job_state"`
@@ -119,28 +158,44 @@ type HeartBeat struct {
 	Ntp       NTP        `json:"ntp"`
 	Address   string     `json:"address"`
 }
+type ProcessHeartBeat struct {
+	Job       string       `json:"job"`
+	Index     int          `json:"index"`
+	Job_state string       `json:"job_state"`
+	Vitals    ProcessVital `json:"vitals"`
+	Ntp       NTP          `json:"ntp"`
+	Address   string       `json:"address"`
+}
 
-func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int) {
+//monit type
+const (
+	FILE_SYSTEM = 0
+	DIRECTORY   = 1
+	FILE        = 2
+	PROCESS     = 3
+	REMOTE_HOST = 4
+	SYSTEM      = 5
+	FIFO        = 6
+)
+
+var localIP string
+
+func init() {
+	localIP = util.GetLocalIp()
+}
+
+func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int, etcdclient *rawetcd.Client) {
 	diskUsage := disk.GetDiskUsage(*conf)
-	agentInfo.Vitals.Disk.System.Percent = int16(diskUsage["system"])
-	agentInfo.Vitals.Disk.Ephemeral.Percent = int16(diskUsage["ephemeral"])
-	agentInfo.Vitals.Disk.Persistent.Percent = int16(diskUsage["persistent"])
+	agentInfo.Vitals.Disk.System.Percent = diskUsage["system"]
+	agentInfo.Vitals.Disk.Ephemeral.Percent = diskUsage["ephemeral"]
+	agentInfo.Vitals.Disk.Persistent.Percent = diskUsage["persistent"]
 
 	monitStatus := monit.GetMonitStatus(conf)
-	//num := 0
-	for _, x := range monitStatus.Services {
-		if strings.Contains(x.ServiceName, "system") {
-			agentInfo.Vitals.Cpu = x.SysCpu
-			agentInfo.Vitals.Load = x.SysLoad
-			agentInfo.Vitals.Mem = x.SysMemory
-			agentInfo.Vitals.Swap = x.SysSwap
-			continue
-		}
-		tempJob := JobInfo{}
-		tempJob.Name = x.ServiceName
-		tempJob.Index = 1
-		//TODO: use etcd lock to get real index.
 
+	for _, x := range monitStatus.Services {
+		tempJob := JobInfo{}
+
+		tempJob.Type = x.Type
 		if x.Monitor == 0 {
 			tempJob.Job_state = "starting"
 		} else if x.Monitor == 1 {
@@ -148,6 +203,32 @@ func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int) {
 		} else {
 			tempJob.Job_state = "not monitored"
 		}
+
+		if x.Type == SYSTEM {
+			agentInfo.Vitals.Cpu = x.SysCpu
+			agentInfo.Vitals.Load = x.SysLoad
+			agentInfo.Vitals.Mem = x.SysMemory
+			agentInfo.Vitals.Swap = x.SysSwap
+			tempJob.Name = localIP
+			tempJob.Index = 0
+		} else {
+			tempJob.ProcessData.Cpu.Percent = x.CpuPercent
+			tempJob.ProcessData.Mem.Kb = x.Memory.Kb
+			tempJob.ProcessData.Mem.Percent = x.Memory.Percent
+			tempJob.ProcessData.Process.Children = x.Children
+			tempJob.ProcessData.Process.Monitor = x.Monitor
+			tempJob.ProcessData.Process.Status = x.Status
+			tempJob.ProcessData.Process.Uptime = x.Uptime
+			tempJob.Name = x.ServiceName
+
+			index, err := etcd.GetIndex(etcdclient, conf.Etcd_dir, tempJob.Name, localIP)
+			if err != nil {
+				fmt.Printf("etcd get index error: %v\n", err)
+				index = 0
+			}
+			tempJob.Index = index
+		}
+
 		agentInfo.Job = append(agentInfo.Job, tempJob)
 
 	}
@@ -182,31 +263,47 @@ func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int) {
 	agentInfo.Eth0Stats = newStats
 
 	agentInfo.Ntp.TimeStamp = time.Now()
-	agentInfo.Address = util.GetLocalIp()
+	agentInfo.Address = localIP
 
 }
 
 func TransferMetrics(agentInfo *AgentInfo, conf *config.Config) {
-	etcd.Connect(conf, util.GetLocalIp())
+	etcdclient := etcd.Connect(conf, localIP)
+	etcd.EtcdHup(etcdclient, conf, localIP)
 	nc, _ := nats.NatsConnect(conf.Mbus)
 	for {
-		GetMetrics(agentInfo, conf, 3)
+		GetMetrics(agentInfo, conf, 3, etcdclient)
 		pubmessage := fmt.Sprintf("hm.agent.heartbeat.%s", conf.Agent_id)
 		fmt.Println(pubmessage)
 		for i := 0; i < len(agentInfo.Job); i++ {
-			heartBeatInfo := HeartBeat{}
-			heartBeatInfo.Address = agentInfo.Address
-			heartBeatInfo.Index = agentInfo.Job[i].Index
-			heartBeatInfo.Job = agentInfo.Job[i].Name
-			heartBeatInfo.Job_state = agentInfo.Job[i].Job_state
-			heartBeatInfo.Ntp = agentInfo.Ntp
-			heartBeatInfo.Traffic = agentInfo.Traffic
-			heartBeatInfo.Vitals = agentInfo.Vitals
-			data, err := json.Marshal(heartBeatInfo)
-			if err != nil {
-				fmt.Printf("Json Marshal agentInfo error : %v\n", err)
+			if agentInfo.Job[i].Type == SYSTEM {
+				heartBeatInfo := SysHeartBeat{}
+				heartBeatInfo.Address = agentInfo.Address
+				heartBeatInfo.Index = 0
+				heartBeatInfo.Job = agentInfo.Job[i].Name
+				heartBeatInfo.Job_state = agentInfo.Job[i].Job_state
+				heartBeatInfo.Ntp = agentInfo.Ntp
+				heartBeatInfo.Traffic = agentInfo.Traffic
+				heartBeatInfo.Vitals = agentInfo.Vitals
+				data, err := json.Marshal(heartBeatInfo)
+				if err != nil {
+					fmt.Printf("Json Marshal agentInfo error : %v\n", err)
+				}
+				nats.NatsPub(pubmessage, nc, data)
+			} else {
+				heartBeatInfo := ProcessHeartBeat{}
+				heartBeatInfo.Address = agentInfo.Address
+				heartBeatInfo.Index = agentInfo.Job[i].Index
+				heartBeatInfo.Job = agentInfo.Job[i].Name
+				heartBeatInfo.Job_state = agentInfo.Job[i].Job_state
+				heartBeatInfo.Ntp = agentInfo.Ntp
+				heartBeatInfo.Vitals = agentInfo.Job[i].ProcessData
+				data, err := json.Marshal(heartBeatInfo)
+				if err != nil {
+					fmt.Printf("Json Marshal agentInfo error : %v\n", err)
+				}
+				nats.NatsPub(pubmessage, nc, data)
 			}
-			nats.NatsPub(pubmessage, nc, data)
 		}
 
 		time.Sleep(3 * time.Second)
@@ -223,8 +320,9 @@ func main() {
 		err         error
 	)
 	if !IsFile(*config_path) {
-		conf = config.GetTemplate()
-		fmt.Printf("No config file find in path: %s . Using template config file.\n", *config_path)
+		//conf = config.GetTemplate()
+		fmt.Printf("Error: No config file find in path: %s. \n", *config_path)
+		return
 	} else {
 		config_file = *config_path
 		conf, err = config.GetConfig(config_file)

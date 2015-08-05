@@ -28,7 +28,7 @@ type Service struct {
 	Ppid          int     `xml:"ppid"`
 	Uptime        int     `xml:"uptime"`
 	Children      int     `xml:"children"`
-	MemPercent    float64 `xml:"memory>percenttotal"`
+	Memory        Memory  `xml:"memory"`
 	CpuPercent    float64 `xml:"cpu>percenttotal"`
 	SysLoad       Load    `xml:"system>load"`
 	SysCpu        Cpu     `xml:"system>cpu"`
