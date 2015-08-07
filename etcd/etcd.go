@@ -34,8 +34,16 @@ func beat(client *etcd.Client, ip string, conf *config.Config) {
 }
 
 func GetIndex(client *etcd.Client, basedir string, jobname string, ip string) (int, error) {
-	jobdir := basedir + "/" + jobname
-	response, err := client.AddChild(jobdir, ip, 0)
+	jobdir := "/jobs" + "/" + jobname
+	response, err := client.Get(jobdir, true, true)
+	if err == nil {
+		for i := 0; i < response.Node.Nodes.Len(); i++ {
+			if response.Node.Nodes[i].Value == ip {
+				return i, nil
+			}
+		}
+	}
+	response, err = client.AddChild(jobdir, ip, 0)
 	if err != nil {
 		fmt.Printf("use etcd to get index error: %v\n", err)
 		return 0, err

@@ -237,7 +237,7 @@ func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int, etcdcli
 		fmt.Printf("New Real SysFs error : %v \n", err)
 	}
 
-	if conf.Agent_id == "" {
+	if conf.Agent_id == "" || conf.Agent_id == "test" {
 		conf.Agent_id, err = sysFs.GetSystemUUID()
 	}
 	//	agentInfo.AgentID = conf.Agent_id
@@ -306,7 +306,7 @@ func TransferMetrics(agentInfo *AgentInfo, conf *config.Config) {
 			}
 		}
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(time.Second * time.Duration(conf.Heartbeat_interval))
 	}
 }
 
@@ -335,7 +335,7 @@ func main() {
 		agentInfo := &AgentInfo{}
 		go TransferMetrics(agentInfo, conf)
 	} else {
-
+		fmt.Println("We don't have a daemon here. Use agentserver.")
 	}
 	util.Trap(func() {})
 }
