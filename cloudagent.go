@@ -111,7 +111,7 @@ type NTP struct {
 }
 
 type SystemLoad struct {
-	Load monit.Load   `json:"load"`
+	Load []float64    `json:"load"`
 	Cpu  monit.Cpu    `json:"cpu"`
 	Mem  monit.Memory `json:"mem"`
 	Swap monit.Swap   `json:"swap"`
@@ -206,7 +206,9 @@ func GetMetrics(agentInfo *AgentInfo, conf *config.Config, interval int, etcdcli
 
 		if x.Type == SYSTEM {
 			agentInfo.Vitals.Cpu = x.SysCpu
-			agentInfo.Vitals.Load = x.SysLoad
+			agentInfo.Vitals.Load = append(agentInfo.Vitals.Load, x.SysLoad.Avg01)
+			agentInfo.Vitals.Load = append(agentInfo.Vitals.Load, x.SysLoad.Avg05)
+			agentInfo.Vitals.Load = append(agentInfo.Vitals.Load, x.SysLoad.Avg15)
 			agentInfo.Vitals.Mem = x.SysMemory
 			agentInfo.Vitals.Swap = x.SysSwap
 			tempJob.Name = localIP

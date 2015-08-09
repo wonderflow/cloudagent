@@ -43,7 +43,7 @@ type Load struct {
 }
 type Cpu struct {
 	User   float64 `json:"user" xml:"user"`
-	System float64 `json:"system" xml:"system"`
+	System float64 `json:"sys" xml:"sys"`
 	Wait   float64 `json:"wait" xml:"wait"`
 }
 type Memory struct {
