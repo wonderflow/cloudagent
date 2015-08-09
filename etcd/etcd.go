@@ -25,7 +25,7 @@ func EtcdHup(client *etcd.Client, conf *config.Config, ip string) {
 
 func beat(client *etcd.Client, ip string, conf *config.Config) {
 	for {
-		if _, err := client.Set(conf.Etcd_dir, ip, uint64(conf.Heartbeat_interval*2)); err != nil {
+		if _, err := client.Set(conf.Etcd_dir+"/"+ip, conf.Agent_id, uint64(conf.Heartbeat_interval*2)); err != nil {
 			log.Fatal(err)
 		}
 		fmt.Printf("%v beat sent.\n", time.Now())
