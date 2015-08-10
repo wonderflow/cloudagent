@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -157,6 +159,7 @@ type SysHeartBeat struct {
 	Traffic   NetTraffic `json:"traffic"`
 	Ntp       NTP        `json:"ntp"`
 	Address   string     `json:"address"`
+	Cores     int        `json:"cores"`
 }
 type ProcessHeartBeat struct {
 	Job       string       `json:"job"`
@@ -273,6 +276,15 @@ func TransferMetrics(agentInfo *AgentInfo, conf *config.Config) {
 	etcdclient := etcd.Connect(conf, localIP)
 	etcd.EtcdHup(etcdclient, conf, localIP)
 	nc, _ := nats.NatsConnect(conf.Mbus)
+	cmd := exec.Command("/bin/sh", "-c", "cat /proc/cpuinfo | grep processor | sort | uniq | wc -l")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		fmt.Printf("Get cpuinfo error: %v\n", err)
+	}
+	cpu_num, _ := strconv.Atoi(strings.TrimRight(out.String(), string(10)))
+	//fmt.Println(cpu_num)
 	for {
 		GetMetrics(agentInfo, conf, 3, etcdclient)
 		pubmessage := fmt.Sprintf("hm.agent.heartbeat.%s", conf.Agent_id)
@@ -287,10 +299,12 @@ func TransferMetrics(agentInfo *AgentInfo, conf *config.Config) {
 				heartBeatInfo.Ntp = agentInfo.Ntp
 				heartBeatInfo.Traffic = agentInfo.Traffic
 				heartBeatInfo.Vitals = agentInfo.Vitals
+				heartBeatInfo.Cores = cpu_num
 				data, err := json.Marshal(heartBeatInfo)
 				if err != nil {
 					fmt.Printf("Json Marshal agentInfo error : %v\n", err)
 				}
+				//fmt.Println(string(data))
 				nats.NatsPub(pubmessage, nc, data)
 			} else {
 				heartBeatInfo := ProcessHeartBeat{}
